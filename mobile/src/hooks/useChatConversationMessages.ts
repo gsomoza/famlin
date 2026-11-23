@@ -20,15 +20,12 @@ interface ConversationFeedPage {
   nextCursor: string | null
 }
 
-export function useChatConversationMessages({
-  conversationId,
-  groupId,
-  modern,
-}: {
-  conversationId?: string
-  groupId?: string
-  modern: boolean
-}) {
+type ConversationFeedOptions = { modern: true; conversationId: string } | { modern: false; groupId: string }
+
+export function useChatConversationMessages(options: ConversationFeedOptions) {
+  const modern = options.modern
+  const conversationId = options.modern ? options.conversationId : undefined
+  const groupId = options.modern ? undefined : options.groupId
   const queryClient = useQueryClient()
   const isFocused = useIsFocused()
   const lastReadNewestId = useRef<string | undefined>(undefined)
@@ -42,10 +39,12 @@ export function useChatConversationMessages({
     string | undefined
   >({
     queryKey,
-    queryFn: async ({ pageParam }: { pageParam?: string }) =>
-      modern
-        ? fetchChatConversationMessages(conversationId!, pageParam ? { cursor: pageParam } : {})
-        : fetchChatMessages(groupId!, pageParam),
+    queryFn: async ({ pageParam }: { pageParam?: string }) => {
+      if (options.modern) {
+        return fetchChatConversationMessages(options.conversationId, pageParam ? { cursor: pageParam } : {})
+      }
+      return fetchChatMessages(options.groupId, pageParam)
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: modern ? !!conversationId : !!groupId,

@@ -84,16 +84,10 @@ export function ChatScreen() {
   const conversationId = conversationsQuery.data?.items.find(
     (conversation) => conversation.kind === 'FAMILY' && conversation.group?.id === groupId
   )?.id
-  const {
-    query,
-    items: feedMessages,
-    onEndReached,
-    unavailable,
-  } = useChatConversationMessages({
-    conversationId,
-    groupId,
-    modern,
-  })
+  const messagesScope = modern
+    ? ({ modern: true, conversationId: conversationId ?? '' } as const)
+    : ({ modern: false, groupId } as const)
+  const { query, items: feedMessages, onEndReached, unavailable } = useChatConversationMessages(messagesScope)
   const messages = feedMessages as ChatMessage[]
   const { isLoading, isFetchingNextPage } = query
 

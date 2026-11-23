@@ -52,7 +52,7 @@ export function DirectMessageScreen() {
   const title = conversation ? chatConversationTitle(conversation, userId) : ''
   const participant = conversation?.participants.find((item) => item.id !== userId)
   const { query, items, onEndReached, unavailable } = useChatConversationMessages({
-    conversationId: conversation ? conversationId : undefined,
+    conversationId: conversation ? conversationId : '',
     modern: true,
   })
 
