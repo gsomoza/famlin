@@ -93,6 +93,7 @@ export interface NotificationPrefs {
   pushOnNewPost?: boolean
   pushOnNewComment?: boolean
   pushOnNewLike?: boolean
+  pushOnDirectMessage?: boolean
   pushOnStory?: boolean
   pushOnGiftList?: boolean
 }
