@@ -251,7 +251,7 @@ it('focuses a searchable recipient picker and delegates conversation reuse to th
     })
   )
   expect(dialog).not.toBeInTheDocument()
-  expect(screen.getByTestId('location')).toHaveTextContent('/chat?conversation=private-2')
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat?conversation=private-2'))
 })
 
 it('sends text through the active conversation and clears the composer', async () => {
