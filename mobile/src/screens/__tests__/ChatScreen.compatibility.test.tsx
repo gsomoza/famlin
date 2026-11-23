@@ -90,7 +90,6 @@ it('uses the generalized family conversation contract on capable servers', async
   await waitFor(() =>
     expect(mockUseChatConversationMessages).toHaveBeenCalledWith({
       conversationId: 'conversation-1',
-      groupId: 'g1',
       modern: true,
     })
   )
@@ -103,7 +102,6 @@ it('keeps old-server family chat on the legacy route contract', async () => {
   mockSupport = 'unsupported'
   await renderScreen()
   expect(mockUseChatConversationMessages).toHaveBeenCalledWith({
-    conversationId: undefined,
     groupId: 'g1',
     modern: false,
   })

@@ -2,9 +2,16 @@ import React from 'react'
 import { Alert } from 'react-native'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { deleteChatMessage, fetchChatConversationMessages, fetchChatConversations } from '@famlin/api-client'
+import {
+  deleteChatMessage,
+  fetchChatConversationMessages,
+  fetchChatConversations,
+  setApiBaseUrl,
+  setMediaToken,
+} from '@famlin/api-client'
 
 const mockNavigate = jest.fn()
+const mockMediaThumbnail = jest.fn((_props: unknown) => null)
 let mockConversationId = 'private-1'
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
@@ -21,7 +28,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 jest.mock('@/components/Icon', () => ({ Icon: () => null }))
 jest.mock('@/components/Avatar', () => ({ Avatar: () => null }))
-jest.mock('@/components/MediaThumbnail', () => ({ MediaThumbnail: () => null }))
+jest.mock('@/components/MediaThumbnail', () => ({ MediaThumbnail: (props: unknown) => mockMediaThumbnail(props) }))
 jest.mock('@/components/ChatComposer', () => ({ ChatComposer: () => null }))
 jest.mock('@/stores/authStore', () => ({
   useAuthStore: (selector: any) => selector({ user: { id: 'me' } }),
@@ -51,7 +58,7 @@ const conversation = {
   updatedAt: '2026-11-23T18:00:00.000Z',
 }
 
-function message(id: string, authorId: string, encryption = 'none') {
+function message(id: string, authorId: string, encryption = 'none', attachmentUrl: string | null = null) {
   return {
     id,
     conversationId: 'private-1',
@@ -60,7 +67,7 @@ function message(id: string, authorId: string, encryption = 'none') {
     author: { id: authorId, name: authorId === 'me' ? 'Gabriel' : 'Ana', avatarUrl: null },
     kind: 'USER',
     content: `message-${id}`,
-    attachmentUrl: null,
+    attachmentUrl,
     refPostId: null,
     createdAt: '2026-11-23T18:00:00.000Z',
     editedAt: null,
@@ -83,24 +90,64 @@ function renderScreen() {
 beforeEach(() => {
   jest.clearAllMocks()
   mockConversationId = 'private-1'
+  setApiBaseUrl('https://famlin.test')
+  setMediaToken('media-token')
   jest.spyOn(Alert, 'alert').mockImplementation(() => {})
 })
 afterEach(() => jest.restoreAllMocks())
 
-it('only exposes confirmed deletion for own messages and repairs the conversation cache', async () => {
+it('opens a video attachment with its authenticated original URL', async () => {
   jest.mocked(fetchChatConversations).mockResolvedValue({ items: [conversation] } as never)
   jest.mocked(fetchChatConversationMessages).mockResolvedValue({
-    items: [message('mine', 'me'), message('theirs', 'ana')],
+    items: [message('video', 'ana', 'none', '/uploads/clip.mp4')],
+    nextCursor: null,
+  })
+  await renderScreen()
+
+  await screen.findByText('message-video')
+  expect(mockMediaThumbnail).toHaveBeenCalledWith(
+    expect.objectContaining({
+      url: 'https://famlin.test/uploads/clip-thumbnail.jpg?token=media-token',
+      fallbackUrl: 'https://famlin.test/uploads/clip.mp4?token=media-token',
+    })
+  )
+
+  fireEvent.press(screen.getByLabelText('postDetail.viewAttachment'))
+  expect(mockNavigate).toHaveBeenCalledWith('ImageViewer', {
+    urls: ['https://famlin.test/uploads/clip.mp4?token=media-token'],
+    initialIndex: 0,
+  })
+})
+
+it('does not expose a delete control for someone elses message', async () => {
+  jest.mocked(fetchChatConversations).mockResolvedValue({ items: [conversation] } as never)
+  jest.mocked(fetchChatConversationMessages).mockResolvedValue({
+    items: [message('theirs', 'ana')],
+    nextCursor: null,
+  })
+  await renderScreen()
+
+  expect(await screen.findByText('message-theirs')).toBeTruthy()
+  expect(screen.queryByLabelText('chat.deleteMessage')).toBeNull()
+})
+
+it('deletes an own message only after destructive confirmation and repairs the cache', async () => {
+  jest.mocked(fetchChatConversations).mockResolvedValue({ items: [conversation] } as never)
+  jest.mocked(fetchChatConversationMessages).mockResolvedValue({
+    items: [message('mine', 'me')],
     nextCursor: null,
   })
   jest.mocked(deleteChatMessage).mockResolvedValue(undefined)
   await renderScreen()
 
   expect(await screen.findByText('message-mine')).toBeTruthy()
-  expect(screen.getAllByLabelText('chat.deleteMessage')).toHaveLength(1)
-
   fireEvent.press(screen.getByLabelText('chat.deleteMessage'))
+
+  expect(Alert.alert).toHaveBeenCalledWith('chat.deleteMessageTitle', 'chat.deleteMessageConfirm', expect.any(Array))
   const buttons = (Alert.alert as jest.Mock).mock.calls[0][2]
+  buttons.find((button: any) => button.style === 'cancel').onPress?.()
+  expect(deleteChatMessage).not.toHaveBeenCalled()
+
   await buttons.find((button: any) => button.style === 'destructive').onPress()
 
   await waitFor(() => expect(deleteChatMessage).toHaveBeenCalledWith('mine'))
