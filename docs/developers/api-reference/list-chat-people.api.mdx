@@ -1,0 +1,63 @@
+---
+id: list-chat-people
+title: "List people eligible for direct messages"
+description: "Returns every other member with whom you currently share at least one"
+sidebar_label: "List people eligible for direct messages"
+hide_title: true
+hide_table_of_contents: true
+api: eJztVttuGzcQ/ZXBvtQ25JV7eRKKAk7rtimS2EgcBIFlZKndkZYxl9yQXCmqIKAf0S/sl/QMKfn+2Mc+acXL3M6ZM9wUrmevonb2ZVNMCqND/LlV8YJdb7gYFVEtQjG5KmSxuB4VDYfa614u4PhbjoO3gXjJfk0utuyp426Gn5WOLa1a19HaDVQP3rONZk2hVZ5JRTKsQiRneWrnqtNmPaLgfOSGZmuyqmOCOUu6KemyZapbrm9IBzJ6yRPqU4DU6KD6npUnFaY2OGfxQdZlNw1ly+S5U9qGkt44kk9Dqmk8h8CBJByf8uCmnNrLFj68G6Ksfhk0TlFgjwRpzgrHmKoGq3V8jftqwaHCLVQKB3tnYbGYbIrvTk7k52G1zoxe6FmKWu4fd9kA/NS61yhPgJna2YhPuY3MjK4TOOPPQUxsioA6dEq+4rpnGHWzz7CFi70XKKPOAejIXbh3THmv1jj1eP32+sNQT5/CGAUEZQwWH6EZHsC5q3n5NKTmnt8QvbaLYjsqBOpnN9RSReXfe/N0F7cGYxRqWUyiH3iL41FH+ZuYuq/0BXup2/bxfqb3BYove9j84eTbp3i91iHA24i0XSqjmxHx1x7Q4cN5oLZ0N6BYjQUUQyvz36HH3jv/XNoPA/x96JQ99qwaKcWIolc2GCU9tNQqIVad1jX38fiVsosB+VbU4jgwPKjYVuPKmuqwlGrXrnkGhscez9OHMtSputWWb51TCpnESknV27PTXz6dv3n1scJBfwOCUPXDyfcVzXFG0cqDhjQzrpYCzrhWQ0jtvu80P0BUtCWxfuysWY8b7hx1sE4HgZGW7JxjowLlqBqrXo/VENtxNnCs7dxJYqOCv6quT8DfBlUI4rvmbkTccrmv7zhylha2mRsdx9aJOC44IaViiz/JZQ0ujfu9VmbfIpebYhDaFm2MfZiMx2gJo225i6WsXfeksh/d4MmtLP2azlLDvXHrTsi0vRbbaDod18n4DILH/nSQQK6u72+/E4JlDt0/dAurBCSRpmP4nw890/596hwArcCfECiC6xakyZl8QhE+lWVZjYT+iXAIWQBc8YzA/EN0yNQq4IkWAkJ/fLikuYeKVBfn7y7pDi/jFtpWJb3A8EhSHJBxpoKMgJVaT6a2kiyc13+mbprQixQ1/ZiC+inprwAloKdcdyjuKnl68RIJCjI5uZ16PUn6LA2x3aUdEdHwToZElKnw9gyhwxoNVjoosa6if/76+y5e2cWfqXXzua61NIqbabSHss2+NoHA9pI+iLIqunq20tcHYPySjYhCED+HU5vmqLI0G7RpZKpmvmgoziKPcPTZQuZczLtZiL/Zzy+UaWpPjaGdSMkwDTU8pIl7dLTA1Ot3uh9a3R8dTWjvU3owdWNORPp3am/tWEp3Ax0klxCxw3RzhgTsAhmN0jV5HrB4xXwGsIDbDWlZxalFojn1kt6hwa/ei/SmwqKmT8uRlWSQJ0LcqewoRbSUBZQiu1w5LxKza7yQmIIWdiFCOYUrefoUr/Du2b8peD+mxUUe1bQb1eExaTZ3iv//Y+jeY2gnN5G/Qh8N3EnZhzzKs4BeYUBqmZjysAQkWUQhZS3Ake3NZqYCY/xvt7L8ZUBVRe7QysrrPPshfriQBloSxhtei3qlkSc9r8yQHj+PR7FI5q2s/3Z2Cfn4F3c06Lw=
+sidebar_class_name: "get api-method"
+info_path: developers/api-reference/famlin-api
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"List people eligible for direct messages"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/api/chat/people"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Returns every other member with whom you currently share at least one
+family, sorted by name then id. The check is live: people disappear as
+soon as no shared family remains. No email addresses are returned.
+This route requires server feature `directMessages`.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./list-chat-people.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./list-chat-people.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

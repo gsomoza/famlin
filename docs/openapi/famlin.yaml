@@ -84,9 +84,19 @@ tags:
     description: Personal bookmarks on posts, visible only to you.
   - name: Chat
     description: |
-      Per-group chat (off by default, toggled by admins). A single central chat
-      per group — not 1-on-1 messaging. When a milestone post is created in a
-      group with chat enabled, a system message is auto-posted in the chat.
+      Family chats and private one-to-one direct messages. Family chat remains
+      the original per-group feature (off by default, toggled by admins), and
+      its legacy routes and response schemas stay available unchanged. Servers
+      with the `directMessages` feature also expose generalized conversation
+      routes for a combined inbox, direct-message creation, message history,
+      unread counts, and read positions.
+
+      A private conversation is visible only to its two participants while they
+      currently share at least one family. That is a live authorization check,
+      not a grant remembered when the conversation was created; losing the
+      shared-family relationship hides the conversation and its uploads.
+      Private conversation/message routes return `404` when the conversation is
+      unknown or inaccessible, and server admins receive no special bypass.
   - name: Stories
     description: |
       Photos shared for 24 hours, Instagram-style. Same audience rules as posts
@@ -350,6 +360,12 @@ paths:
                 pushOnNewComment: { type: boolean }
                 pushOnNewLike: { type: boolean }
                 pushOnChitchat: { type: boolean }
+                pushOnDirectMessage:
+                  type: boolean
+                  description: |
+                    Push notifications for direct messages (push only). The
+                    field is absent on servers that predate `directMessages`;
+                    clients should omit the preference control there.
                 pushOnStory:
                   type: boolean
                   description: Opt-in push for other members' new stories (push only, off by default).
@@ -740,8 +756,10 @@ paths:
                       /api/diagnostics/reports`), `giftListGuests` (guest
                       wishlists on gift lists), `paginatedComments`,
                       `configurableLimits` (`limits` below),
-                      `calendarFeed` (`/api/auth/me/calendar-feed`).
-                    example: [accountDeletion, circles, stories, memberExport, giftLists, uploadProcessing, livePhotos, deviceDiagnostics, wiki, diagnosticReports, giftListGuests, paginatedComments, configurableLimits, calendarFeed]
+                      `calendarFeed` (`/api/auth/me/calendar-feed`),
+                      `directMessages` (generalized `/api/chat` conversations
+                      and private one-to-one messaging).
+                    example: [accountDeletion, circles, stories, memberExport, giftLists, uploadProcessing, livePhotos, deviceDiagnostics, wiki, diagnosticReports, giftListGuests, paginatedComments, configurableLimits, calendarFeed, directMessages]
                   limits:
                     type: object
                     description: >-
@@ -2110,13 +2128,238 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/chat/people:
+    get:
+      operationId: listChatPeople
+      tags: [Chat]
+      summary: List people eligible for direct messages
+      description: |
+        Returns every other member with whom you currently share at least one
+        family, sorted by name then id. The check is live: people disappear as
+        soon as no shared family remains. No email addresses are returned.
+        This route requires server feature `directMessages`.
+      responses:
+        '200':
+          description: Eligible direct-message recipients
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatPeoplePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/chat/conversations:
+    get:
+      operationId: listChatConversations
+      tags: [Chat]
+      summary: List accessible chat conversations
+      description: |
+        Returns a combined inbox of enabled `FAMILY` conversations and
+        `PRIVATE` direct conversations, newest `updatedAt` first. Family
+        conversations include all current family members; a private
+        conversation appears only while the caller is one of its two explicit
+        participants and the pair currently share a family. The list is not
+        paginated. This route requires server feature `directMessages`.
+      responses:
+        '200':
+          description: The currently accessible conversation inbox
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConversationsPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createChatConversation
+      tags: [Chat]
+      summary: Open a private direct-message conversation
+      description: |
+        Finds or creates the canonical `PRIVATE` conversation with one other
+        person. The recipient must currently share at least one family with
+        the caller. Repeating the request returns the same pair's conversation.
+        A caller cannot message themselves. This route requires server feature
+        `directMessages`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, participantIds]
+              properties:
+                kind:
+                  type: string
+                  enum: [PRIVATE]
+                participantIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  description: Exactly one other user's id.
+                  items: { type: string }
+      responses:
+        '200':
+          description: The existing or newly created conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConversation'
+        '400':
+          description: The caller tried to start a conversation with themselves.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: |
+            The recipient does not exist, is not eligible, or is otherwise
+            indistinguishable from an inaccessible person.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/chat/conversations/unread:
+    get:
+      operationId: getChatConversationUnreadCounts
+      tags: [Chat]
+      summary: Get conversation unread counts
+      description: |
+        Returns the total unread count and a count keyed by conversation id for
+        every currently accessible `FAMILY` and `PRIVATE` conversation.
+        Designed for lightweight app polling (the official clients poll the
+        badge while the app is active). This route requires server feature
+        `directMessages`.
+      responses:
+        '200':
+          description: Unread counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConversationUnreadCounts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/chat/conversations/{conversationId}/messages:
+    get:
+      operationId: listChatConversationMessages
+      tags: [Chat]
+      summary: List messages in a conversation
+      description: |
+        Newest first, cursor-paginated (`take` defaults to 30 and is capped at
+        100). The conversation must currently be accessible under the same
+        live family rules as the inbox. FAMILY results preserve the family
+        chat fields (`replyTo`, `readBy`) plus conversation metadata; PRIVATE
+        results contain only the direct conversation's participants and
+        payload. Unknown or inaccessible private conversations return `404`.
+        This route requires server feature `directMessages`.
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/take'
+      responses:
+        '200':
+          description: A page of conversation messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConversationMessagesPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createChatConversationMessage
+      tags: [Chat]
+      summary: Send a conversation message
+      description: |
+        `content` and `attachmentUrl` are optional but at least one is
+        required. `attachmentUrl` must be an unused `/uploads/...` file owned
+        by the caller. For a PRIVATE conversation, the upload becomes
+        conversation-scoped and is readable only while the conversation remains
+        accessible to the viewer. A saved participant snapshot never grants
+        access. Current shared-family membership is checked again by the route.
+        This route requires server feature `directMessages`; it does not accept
+        encryption parameters.
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  maxLength: 2000
+                attachmentUrl:
+                  type: string
+                  description: An unused `/uploads/...` path owned by the caller.
+              description: At least one of `content` or `attachmentUrl` is required.
+      responses:
+        '200':
+          description: The created conversation message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConversationMessage'
+        '400':
+          description: The body is empty or the attachment cannot be claimed for this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/chat/conversations/{conversationId}/read:
+    post:
+      operationId: markChatConversationRead
+      tags: [Chat]
+      summary: Mark a conversation read up to now
+      description: |
+        Updates the caller's read position for the currently accessible
+        `FAMILY` or `PRIVATE` conversation. This route requires server feature
+        `directMessages`; an inaccessible private conversation returns `404`.
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Read position updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/chat/messages/{id}:
     delete:
       operationId: deleteChatMessage
       tags: [Chat]
       summary: Delete a chat message
       description: |
-        Permanent. Only the author (or an admin) can delete.
+        Permanent. In a family chat, only the author (or an admin) can delete.
+        In a private conversation, only the author can delete, and an
+        inaccessible conversation is indistinguishable from a missing message
+        (`404`); admin status does not bypass the private boundary. Deleting a
+        private attachment-only message removes that upload when no other
+        message references it.
       parameters:
         - name: id
           in: path
@@ -5208,6 +5451,11 @@ components:
         pushOnChitchat:
           type: boolean
           description: Push notifications for new chat messages (email variant not supported).
+        pushOnDirectMessage:
+          type: boolean
+          description: |
+            Push notifications for direct messages (email variant not
+            supported). Absent on servers older than `directMessages`.
         pushOnStory:
           type: boolean
           description: |
@@ -5855,6 +6103,198 @@ components:
           nullable: true
           description: Pass back as `?cursor=` for the next page; `null` on the last page.
 
+    ChatEligiblePerson:
+      type: object
+      description: A member with whom the caller currently shares at least one family.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        avatarUrl:
+          type: string
+          nullable: true
+
+    ChatPeoplePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatEligiblePerson'
+
+    ChatConversationKind:
+      type: string
+      enum: [FAMILY, PRIVATE]
+      description: |
+        `FAMILY` is one existing family chat; `PRIVATE` is a canonical
+        one-to-one direct-message pair with explicit participants.
+
+    ChatConversationLastMessage:
+      type: object
+      nullable: true
+      description: |
+        A privacy-safe inbox summary of the newest message. For an unsupported
+        `encryption` marker, `content` is null and `hasAttachment` is false.
+      properties:
+        id: { type: string }
+        authorId: { type: string }
+        content:
+          type: string
+          nullable: true
+        hasAttachment:
+          type: boolean
+        createdAt: { type: string, format: date-time }
+        encryption:
+          type: string
+          description: |
+            Open encryption compatibility marker. Current servers use
+            `none`; this field does not mean encryption is a shipped user
+            feature.
+
+    ChatConversation:
+      type: object
+      description: |
+        A conversation visible in the combined inbox. Private access is
+        checked live from the explicit participant pair plus a currently shared
+        family; it is never a persisted creation-time grant.
+      properties:
+        id: { type: string }
+        kind:
+          $ref: '#/components/schemas/ChatConversationKind'
+        group:
+          nullable: true
+          description: Present for `FAMILY`, absent or null for `PRIVATE`.
+          allOf:
+            - type: object
+              properties:
+                id: { type: string }
+                name: { type: string }
+        participants:
+          type: array
+          description: Current family members for `FAMILY`, the two explicit users for `PRIVATE`.
+          items:
+            $ref: '#/components/schemas/ChatEligiblePerson'
+        lastMessage:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ChatConversationLastMessage'
+        unreadCount: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time }
+
+    ChatConversationsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatConversation'
+
+    ChatConversationMessage:
+      type: object
+      description: |
+        A message returned through the generalized conversation endpoints.
+        The existing family-only `/api/chat/groups/...` endpoints continue to
+        return the legacy `ChatMessage` schema instead.
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        groupId:
+          type: string
+          nullable: true
+          description: Family id for `FAMILY`; null for `PRIVATE`.
+        authorId: { type: string }
+        author:
+          $ref: '#/components/schemas/UserSummary'
+        kind:
+          type: string
+          description: An open persisted discriminator; current messages use `USER` or `SYSTEM_MILESTONE`.
+        content:
+          type: string
+          nullable: true
+          description: |
+            Plaintext content. Current servers send plaintext only; for an
+            unsupported encryption marker clients must not infer or display
+            this field.
+        attachmentUrl:
+          type: string
+          nullable: true
+          description: A participant- or family-scoped `/uploads/...` path, or null.
+        refPostId:
+          type: string
+          nullable: true
+        replyToMessageId:
+          type: string
+          nullable: true
+          description: Present for FAMILY responses; omitted for PRIVATE responses.
+        replyTo:
+          nullable: true
+          description: Read-time reply preview, present for FAMILY responses.
+          allOf:
+            - type: object
+              properties:
+                id: { type: string }
+                authorId: { type: string }
+                authorName: { type: string }
+                kind: { type: string }
+                content:
+                  type: string
+                  nullable: true
+                attachmentUrl:
+                  type: string
+                  nullable: true
+        readBy:
+          type: array
+          description: |
+            Family members whose read position is at or after the message;
+            present for FAMILY responses and omitted for PRIVATE responses.
+          items:
+            $ref: '#/components/schemas/UserSummary'
+        createdAt: { type: string, format: date-time }
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
+        encryption:
+          type: string
+          description: |
+            Open compatibility marker for future conversation payload formats.
+            `none` is the only marker supported by today's clients. This
+            schema is forward compatibility, not a claim that direct-message
+            encryption is shipped.
+        encryptedPayload:
+          nullable: true
+          description: |
+            Opaque encrypted payload reserved for a future client/server
+            format. For current plaintext messages it is null. A client that
+            does not recognize `encryption` must render a generic
+            unsupported-message placeholder and must not derive a preview,
+            attachment indicator, or content from `encryptedPayload`.
+
+    ChatConversationMessagesPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatConversationMessage'
+        nextCursor:
+          type: string
+          nullable: true
+          description: Pass back as `?cursor=` for the next page; `null` on the last page.
+
+    ChatConversationUnreadCounts:
+      type: object
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        byConversation:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+          example:
+            conversation_abc: 2
+
     StoryAuthor:
       type: object
       properties:
@@ -6098,7 +6538,14 @@ components:
         id: { type: string }
         type:
           type: string
-          description: '`new_post`, `new_comment`, `new_like_post`, `new_like_comment`, `mention`, `on_this_day`, `trip_checkin`, `album_photo`, `new_story`, `story_reply`, `story_reaction`, `gift_list_invite`, `gift_draw`, or `gift_list_updated`. A `gift_draw` message never names your recipient.'
+          description: |
+            `new_post`, `new_comment`, `new_like_post`, `new_like_comment`,
+            `mention`, `on_this_day`, `new_chat_message`, `new_direct_message`,
+            `trip_checkin`, `album_photo`, `new_story`, `story_reply`,
+            `story_reaction`, `gift_list_invite`, `gift_draw`, or
+            `gift_list_updated`. A `gift_draw` message never names your
+            recipient. A direct-message notification uses generic copy and
+            never includes the sender's message excerpt.
         message: { type: string }
         relatedPostId:
           type: string
@@ -6119,6 +6566,13 @@ components:
           properties:
             id: { type: string }
             groupId: { type: string }
+        relatedChatConversationId:
+          type: string
+          nullable: true
+          description: |
+            Set for `new_direct_message`, so the client can deep-link to the
+            conversation. Null or absent for other notification types and
+            cleared if the conversation is deleted.
         readAt:
           type: string
           format: date-time
